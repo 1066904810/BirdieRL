@@ -529,6 +529,16 @@ class JumpTakeoffStateMachine(WheelbipeStateMachineBase):
         else:
             peak_height = torch.full((count,), float(peak_cfg), dtype=torch.float, device=env.device)
 
+        # 手动跳跃：用手动指定高度覆盖随机采样高度（在计算 peak_time/duration 之前，
+        # 保证弹道参数一致），并一次性消费
+        manual_target = getattr(env, "jump_takeoff_manual_target_height", None)
+        if manual_target is not None:
+            enter_ids = enter_mask.nonzero(as_tuple=False).flatten()
+            manual_mask = torch.isfinite(manual_target[enter_ids])
+            if torch.any(manual_mask):
+                peak_height[manual_mask] = manual_target[enter_ids[manual_mask]]
+                manual_target[enter_ids[manual_mask]] = float("nan")
+
         push_start_height = float(traj_cfg.get("push_start_height", 0.20))
         release_height = float(traj_cfg.get("release_height", 0.38))
         gravity = max(float(traj_cfg.get("gravity", 9.81)), 1.0e-6)

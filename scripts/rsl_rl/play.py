@@ -364,6 +364,10 @@ def main():
     if args_cli.keyboard and controller is not None:
         # 设置环境引用
         controller.set_env(env)
+
+        # 启用键盘权威命令：v_x/v_y/omega_z/height 全部以键盘为准
+        env.unwrapped.cfg.play_keyboard_command_enabled = True
+        print("[INFO] 已启用键盘权威命令（v_x/v_y/omega_z/height）")
         
         # 初始化高度命令：从环境配置读取默认值，确保与环境一致
         default_height = getattr(env_cfg, "default_height_cmd", 0.24)
@@ -452,6 +456,11 @@ def main():
     # 初始化时重置所有键盘控制命令到默认值
     if args_cli.keyboard and controller is not None:
         controller.reset()
+        # 对齐高度：reset 后地形覆盖可能重采样了 height_cmd，这里让键盘高度跟上
+        if hasattr(env.unwrapped, "play_keyboard_height_command") and hasattr(env.unwrapped, "height_cmd"):
+            _reset_h = float(env.unwrapped.height_cmd[0].item())
+            controller.set_current_height(_reset_h)
+            env.unwrapped.play_keyboard_height_command[:] = _reset_h
         print("[INFO] 初始环境重置完成，所有键盘命令已设置为默认值")
 
     # # export policy to onnx/jit
@@ -647,13 +656,10 @@ def main():
             
             # 调试：检查策略网络输出的动作和实际角速度（如果有omega输入时）
             if args_cli.keyboard and controller is not None and cmd_info is not None:
-                # 跳跃状态：只要窗口/flag 激活就打印
+                # 跳跃状态：只要起跳状态机非 IDLE 就打印
                 jump_active = False
-                jpm = None
-                if hasattr(env.unwrapped, "jump_phase_manager") and hasattr(env.unwrapped, "manual_jump_steps"):
-                    jpm = env.unwrapped.jump_phase_manager
-                    if jpm is not None:
-                        jump_active = bool(torch.any(env.unwrapped.manual_jump_steps > 0) or torch.any(jpm.jump_flag))
+                if hasattr(env.unwrapped, "jump_takeoff_phase"):
+                    jump_active = bool(torch.any(env.unwrapped.jump_takeoff_phase != 0))
 
                 if cmd_info.get("has_input", False) or jump_active:
                     # 检查策略网络接收到的命令值（从环境读取）
@@ -684,11 +690,13 @@ def main():
                             target_h = float(env.unwrapped.height_cmd[0].item())
                             actual_h = env.unwrapped.robot.data.root_pos_w[0, 2].item()
                             print(f"[调试] 实际高度: {actual_h:.3f} m, 目标: {target_h:.3f} m")
-                    # 跳跃调试：窗口内最高高度 vs 目标跳跃高度
-                    if jpm is not None and jump_active:
-                        target_jump_h = float(jpm.jump_height[0].item())
-                        max_jump_h = float(jpm.max_height[0].item())
-                        remaining = int(env.unwrapped.manual_jump_steps[0].item())
+                    # 跳跃调试：目标峰值高度 / 当前最高高度 / 剩余步数
+                    if jump_active and hasattr(env.unwrapped, "jump_takeoff_ref_target_height"):
+                        target_jump_h = float(env.unwrapped.jump_takeoff_ref_target_height[0].item())
+                        max_jump_h = float(env.unwrapped.jump_takeoff_episode_max_height[0].item())
+                        dur = float(env.unwrapped.jump_takeoff_ref_duration[0].item())
+                        phase_t = float(env.unwrapped.jump_takeoff_phase_time[0].item())
+                        remaining = max(int((dur - phase_t) / env.unwrapped.step_dt), 0)
                         print(f"[调试] 跳跃高度: 当前最高={max_jump_h:.3f} m, 目标={target_jump_h:.3f} m")
                         print(f"[调试] 跳跃窗口: 剩余步数={remaining}, 最高高度={max_jump_h:.3f} m, 目标={target_jump_h:.3f} m")
             # env stepping

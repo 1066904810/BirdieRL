@@ -1250,6 +1250,8 @@ class Wheelbipe25V3Env(DirectRLEnv):
 
     def _get_effective_height_cmd(self) -> torch.Tensor:
         """Return the runtime height command used by height rewards."""
+        if self._play_keyboard_override_active():
+            return self.play_keyboard_height_command
         base_height_cmd = self._apply_special_height_wave(self.height_cmd)
         base_height_cmd = self._apply_height_command_special_modes(base_height_cmd)
         height_cmd = self.state_machine_manager.get_effective_height_cmd(self, base_height_cmd)
@@ -1649,6 +1651,26 @@ class Wheelbipe25V3Env(DirectRLEnv):
         self.jump_takeoff_request[env_ids_t[~request_mask]] = False
         if torch.any(request_mask):
             self.request_jump_takeoff(env_ids_t[request_mask])
+
+    def trigger_manual_jump(
+        self, duration_steps: int | None = None, jump_height: float | None = None
+    ) -> tuple[bool, int]:
+        """手动触发一次跳跃起跳（键盘 Q）。返回 (ok, steps)。
+
+        仅在 ``jump_takeoff_state_machine_cfg.enabled`` 时生效；
+        手动高度会通过 ``jump_takeoff_manual_target_height`` 一次性覆盖随机采样高度。
+        """
+        cfg = getattr(self.cfg, "jump_takeoff_state_machine_cfg", {}) or {}
+        if not bool(cfg.get("enabled", False)) or not hasattr(self, "jump_takeoff_request"):
+            return False, 0
+        if jump_height is None:
+            jump_height = float(getattr(self.cfg, "manual_jump_height", 0.70))
+        if duration_steps is None:
+            duration_steps = int(getattr(self.cfg, "manual_jump_window", 25))
+        if hasattr(self, "jump_takeoff_manual_target_height"):
+            self.jump_takeoff_manual_target_height[:] = float(jump_height)
+        self.request_jump_takeoff()
+        return True, int(duration_steps)
 
     def _force_resample_commands(self, env_ids: Sequence[int] | torch.Tensor | None) -> torch.Tensor:
         """Resample command-generator outputs immediately for selected environments."""
@@ -2126,6 +2148,10 @@ class Wheelbipe25V3Env(DirectRLEnv):
         self.command_counter = self.command_generator.command_counter.clone()
         self.command = self.command_generator.command.clone()
 
+        # play 模式键盘权威命令缓冲（默认不启用，开销可忽略）
+        self.play_keyboard_velocity_command = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device)
+        self.play_keyboard_height_command = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+
         # height command
         self.height_cmd = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self.height_cmd.fill_(self.cfg.default_height_cmd)
@@ -2188,6 +2214,10 @@ class Wheelbipe25V3Env(DirectRLEnv):
         self.airborne_current_duration = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self.airborne_max_duration = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self.jump_takeoff_request = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        # 手动跳跃目标高度（NaN=未指定，进入起跳时一次性消费）
+        self.jump_takeoff_manual_target_height = torch.full(
+            (self.num_envs,), float("nan"), dtype=torch.float, device=self.device
+        )
         self.jump_takeoff_phase = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.jump_takeoff_phase_time = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self.jump_takeoff_cooldown_time = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
@@ -3114,6 +3144,7 @@ class Wheelbipe25V3Env(DirectRLEnv):
         # 子类钩子：在命令刷新后、obs 构建前，允许子类对 command / height_cmd 做修改
         self._on_command_updated()
         self._apply_predefined_reset_air_command_limits()
+        self._apply_play_keyboard_command_override()
         # 起身训练：整个落地+起身阶段速度命令和角速度命令强制为0
         # if getattr(self.cfg, 'enable_standup_training', False):
         #     in_standup_phase = (self._standup_phase == 0) | (self._standup_phase == 1)
@@ -4049,6 +4080,7 @@ class Wheelbipe25V3Env(DirectRLEnv):
         self.command = self.command_generator.command.clone()
         self._on_command_updated()
         self._apply_predefined_reset_air_command_limits()
+        self._apply_play_keyboard_command_override()
 
         # Logging rewards
         for key, value in rewards.items():
@@ -5629,6 +5661,20 @@ class Wheelbipe25V3Env(DirectRLEnv):
         alpha_buffer[...,4] = -(alpha_buffer[...,4]-alpha_offset[4])
         alpha_buffer[...,5] = alpha_buffer[...,5]-alpha_offset[5]
         return alpha_buffer
+
+    def _play_keyboard_override_active(self) -> bool:
+        """play 模式下键盘权威命令是否生效。"""
+        return bool(getattr(self.cfg, "play_keyboard_command_enabled", False))
+
+    def _apply_play_keyboard_command_override(self) -> None:
+        """把键盘命令注入为最终权威值（覆盖地形覆盖/状态机/重置限制的结果）。"""
+        if not self._play_keyboard_override_active():
+            return
+        self.command[:, :3] = self.play_keyboard_velocity_command
+        # 同步写回生成器，避免 V13 的 _sync_command_generator_command() 与下一帧 compute() 反写
+        vel_command_b = getattr(self.command_generator, "vel_command_b", None)
+        if vel_command_b is not None:
+            vel_command_b[:, :3] = self.play_keyboard_velocity_command
 
     def _on_command_updated(self) -> None:
         """Hook for command post-processing."""

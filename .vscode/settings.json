@@ -1,0 +1,28 @@
+{
+  "python.defaultInterpreterPath": "/home/isaacsim/miniconda3/envs/env-isaaclab/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/scripts/rsl_rl",
+    "${workspaceFolder}/scripts/utils",
+    "${workspaceFolder}/source/agent_rl",
+    "${workspaceFolder}/source/agent_tasks",
+    "${workspaceFolder}/source/agent_world",
+    "/home/isaacsim/桌面/rsl_rl",
+    "/home/isaacsim/桌面/IsaacLab/source/isaaclab",
+    "/home/isaacsim/桌面/IsaacLab/source/isaaclab_rl",
+    "/home/isaacsim/桌面/IsaacLab/source/isaaclab_tasks"
+  ],
+  "python.autoComplete.extraPaths": [
+    "${workspaceFolder}/scripts/rsl_rl",
+    "${workspaceFolder}/scripts/utils",
+    "${workspaceFolder}/source/agent_rl",
+    "${workspaceFolder}/source/agent_tasks",
+    "${workspaceFolder}/source/agent_world",
+    "/home/isaacsim/桌面/rsl_rl",
+    "/home/isaacsim/桌面/IsaacLab/source/isaaclab",
+    "/home/isaacsim/桌面/IsaacLab/source/isaaclab_rl",
+    "/home/isaacsim/桌面/IsaacLab/source/isaaclab_tasks"
+  ],
+  "python.analysis.diagnosticMode": "openFilesOnly",
+  "python.analysis.typeCheckingMode": "off"
+
+}

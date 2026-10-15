@@ -186,6 +186,8 @@ class Wheelbipe25v3BaseEnvCfg(DirectRLEnvCfg):
     value_space = 1
     play: bool = False
     play_keep_done_reset: bool = False
+    # play 模式下键盘为 v_x/v_y/yaw/height 的最终权威命令（默认关闭，训练路径零影响）
+    play_keyboard_command_enabled: bool = False
     reset_heading_axis_aligned_only: bool = False
     reset_heading_axis_aligned_candidates_deg: tuple[float, ...] = (0.0, 90.0, 180.0, -90.0)
     reset_heading_target_terminate_enabled: bool = False

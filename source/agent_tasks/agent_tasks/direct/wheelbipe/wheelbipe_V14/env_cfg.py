@@ -2221,6 +2221,32 @@ class WheelbipeV14RoughEnvCfg_v1_Play(WheelbipeV14RoughEnvCfg_v1):
         self.episode_length_s = 5
         self.height_range = [0.25,0.25]
         self.play = True
+        # 键盘 Q 手动触发跳跃：启用起跳状态机（trigger.mode="manual" 只响应手动 request）
+        self.jump_takeoff_state_machine_cfg = {
+            "enabled": True,
+            "trigger": {
+                "mode": "manual",
+                "min_episode_time_s": 0.0,
+                "cooldown_s": 0.5,
+                "require_tracking": False,
+            },
+            "trajectory": 
+            # {
+            #     "enabled": True,
+            #     "gravity": 9.81,
+            #     "push_start_height": 0.20,
+            #     "release_height": 0.38,
+            #     "peak_height": (0.70, 0.70),
+            #     "tuck_timing_mode": "dynamic_push_time",
+            #     "min_duration_s": 0.20,
+            # },
+            # 若纯弹簧+策略不起跳，改为:
+            {"enabled": True, "type": "velocity", "mode": "set_if_lower",
+             "z_velocity": "ref_release", "velocity_timing": "push_start", "probability": 1.0},
+            "assist": {"enabled": False},
+
+            "allowed_terrain_names": (),
+        }
         self.play_ang_vel_z_debug_vis = False
         self.play_height_scanner_debug_vis = True
         self.play_terrain_debug_vis = True

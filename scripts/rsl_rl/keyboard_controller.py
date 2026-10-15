@@ -222,6 +222,15 @@ class Se3KeyboardMobile(DeviceBase):
             env: Environment object
         """
         self._env = env
+        # 用环境默认高度/高度范围初始化，保证键盘高度命令与环境一致
+        env_unwrapped = env.unwrapped
+        cfg = getattr(env_unwrapped, "cfg", None)
+        default_h = float(getattr(cfg, "default_height_cmd", self._default_height))
+        self.set_default_height(default_h)
+        self.set_current_height(default_h)
+        height_range = getattr(cfg, "height_range", None)
+        if height_range is not None:
+            self.set_height_range(height_range)
         # 默认绑定 Q 触发手动跳跃（如果环境支持）
         if self._enable_manual_jump:
             self.add_callback("Q", self._trigger_manual_jump)
@@ -304,6 +313,14 @@ class Se3KeyboardMobile(DeviceBase):
             # Direct 模式：直接设置 height_cmd 属性
             if hasattr(env_unwrapped, "height_cmd"):
                 env_unwrapped.height_cmd[:] = self._current_height
+
+        # play 模式键盘权威命令（存在这些缓冲时才写，避免影响其它任务）
+        if hasattr(env_unwrapped, "play_keyboard_velocity_command"):
+            env_unwrapped.play_keyboard_velocity_command[:, 0].fill_(v_x)
+            env_unwrapped.play_keyboard_velocity_command[:, 1].fill_(v_y)
+            env_unwrapped.play_keyboard_velocity_command[:, 2].fill_(omega_z)
+        if hasattr(env_unwrapped, "play_keyboard_height_command"):
+            env_unwrapped.play_keyboard_height_command[:] = self._current_height
 
     def _trigger_manual_jump(self):
         """触发一次手动跳跃窗口，将 jump onehot 置 JUMP 指定步数。"""
